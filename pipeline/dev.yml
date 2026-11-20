@@ -1,0 +1,216 @@
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+
+pool:
+  name: 'Default'
+parameters:
+- name: runtflint
+  displayName: Run tflint?
+  type: boolean
+  default: false
+
+
+- name: runtfsec
+  displayName: Run tsec?
+  type: boolean
+  default: false
+
+- name: rungitleaks
+  displayName: Run gitleaks?
+  type: boolean
+  default: false
+- name: runTerraformInit
+  displayName: Run Terraform Init?
+  type: boolean
+  default: false
+
+- name: runTerraformPlan
+  displayName: Run Terraform Plan?
+  type: boolean
+  default: false
+
+- name: runTerraformApply
+  displayName: Run Terraform Apply?
+  type: boolean
+  default: false
+
+stages:
+
+# ============================================================
+# Security Scan Stage
+# ============================================================
+
+- stage: tflint
+  displayName: 'tflint scan'
+  condition: ${{ parameters.runtflint }}
+  dependsOn: []
+
+  jobs:
+  - job: TFLintScan
+    displayName: 'TFLint Scan'
+
+    steps:
+    - task: PowerShell@2
+      displayName: 'Run TFLint'
+      inputs:
+        targetType: 'inline'
+        script: |
+          tflint --recursive
+          tflint --force
+
+- stage: tfsec
+  displayName: tfsec
+  condition: ${{ parameters.runtfsec }}
+  dependsOn: []
+  jobs:
+  - job: TfsecScan
+    displayName: 'tfsec Scan'
+    
+
+    steps:
+    - task: PowerShell@2
+      displayName: 'Run tfsec'
+      inputs:
+        targetType: 'inline'
+        script: |
+          tfsec .
+
+- stage: gitleaks
+  displayName: gitleaks
+  condition: ${{ parameters.runGitleaks }}
+  dependsOn: []
+  jobs:
+  - job: GitleaksScan
+    displayName: 'Gitleaks Scan'
+    
+
+    steps:
+    - task: PowerShell@2
+      displayName: 'Run Gitleaks'
+      inputs:
+        targetType: 'inline'
+        script: |
+          gitleaks git
+
+
+# ============================================================
+# Terraform Init Stage
+# ============================================================
+
+- stage: TerraformInit
+  displayName: 'Terraform Init'
+  condition: ${{ parameters.runTerraformInit}} 
+  dependsOn:
+  - tflint
+  - tfsec
+  - gitleaks
+
+  jobs:
+
+  - job: TerraformInitJob
+    displayName: 'Terraform Init Job'
+
+    steps:
+
+    - task: TerraformTask@5
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)\environment\dev'
+        backendServiceArm: 'yogeshchaudhary_service_connection_new'
+        backendAzureRmStorageAccountName: 'yogistorage'
+        backendAzureRmContainerName: 'yogi'
+        backendAzureRmKey: 'yogi.tfstate'
+        commandOptions: '-reconfigure'
+
+
+
+
+- stage: Terraformplan
+  displayName: 'Terraformplan'
+  condition: ${{ parameters.runTerraformPlan }}
+  dependsOn: TerraformInit
+
+  jobs:
+
+  - job: TerraformplanJob
+    displayName: 'TerraformplanJob'
+
+    steps:
+
+    - task: TerraformTask@5
+      displayName: 'Terraformplan'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)\environment\dev'
+        backendServiceArm: 'yogeshchaudhary_service_connection_new'
+        backendAzureRmStorageAccountName: 'yogistorage'
+        backendAzureRmContainerName: 'yogi'
+        backendAzureRmKey: 'yogi.tfstate'
+        commandOptions: '-reconfigure'
+    - task: TerraformTask@5
+      inputs:
+       provider: 'azurerm'
+       command: 'plan'
+       workingDirectory: '$(System.DefaultWorkingDirectory)\environment\dev'
+       environmentServiceNameAzureRM: 'yogeshchaudhary_service_connection_new'
+- stage: ManualApproval
+  displayName: Manual Approval
+  dependsOn: TerraformPlan
+  jobs:
+  - job: ManualApproval
+    pool: server
+    steps: 
+    - task: ManualValidation@1
+      inputs:
+       notifyUsers: 'abc@abc.com'
+       instructions: 'Check plan and approve'
+
+- stage: Terraformapply
+  displayName: 'Terraformapply'
+  condition: ${{ parameters.runTerraformApply }}
+  dependsOn: ManualApproval
+
+  jobs:
+
+  - job: TerraformapplyJob
+    displayName: 'TerraformapplyJob'
+
+    steps:
+
+    - task: TerraformTask@5
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)\environment\dev'
+        backendServiceArm: 'yogeshchaudhary_service_connection_new'
+        backendAzureRmStorageAccountName: 'yogistorage'
+        backendAzureRmContainerName: 'yogi'
+        backendAzureRmKey: 'yogi.tfstate'
+        commandOptions: '-reconfigure'
+    - task: TerraformTask@5
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        workingDirectory: '$(System.DefaultWorkingDirectory)\environment\dev'
+        environmentServiceNameAzureRM: 'yogeshchaudhary_service_connection_new'
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
